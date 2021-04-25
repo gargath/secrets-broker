@@ -1,0 +1,7 @@
+domain: phil.pub
+repo: github.com/gargath/secrets-broker
+resources:
+- group: secretsbroker
+  kind: VaultSecret
+  version: v1alpha1
+version: "2"
