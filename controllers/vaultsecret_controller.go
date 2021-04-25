@@ -19,12 +19,16 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -35,8 +39,9 @@ import (
 // VaultSecretReconciler reconciles a VaultSecret object
 type VaultSecretReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log      logr.Logger
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=secretsbroker.phil.pub,resources=vaultsecrets,verbs=get;list;watch;create;update;patch;delete
@@ -58,10 +63,11 @@ func (r *VaultSecretReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	log.Info(fmt.Sprintf("Status on this thing is: %+v", vs.Status))
 	switch vs.Status.Phase {
 	case "":
-		vs.Status = secretsbrokerv1alpha1.VaultSecretStatus{
+		myVs := vs.DeepCopy()
+		myVs.Status = secretsbrokerv1alpha1.VaultSecretStatus{
 			Phase: "Pending",
 		}
-		if err := r.Update(ctx, &vs); err != nil {
+		if err := r.Update(ctx, myVs); err != nil {
 			log.Error(err, "unable to update VaultSecret status")
 			return ctrl.Result{}, err
 		}
@@ -93,8 +99,21 @@ func (r *VaultSecretReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 					return ctrl.Result{}, err
 				}
 				log.Info("Done handling the Secret, now updating the Phrase")
-				vs.Status.Phase = "InSync"
-				r.Client.Update(ctx, &vs)
+				myVs := vs.DeepCopy()
+				myVs.Status.Phase = "InSync"
+				apimeta.SetStatusCondition(&myVs.Status.Conditions, metav1.Condition{
+					Type:               "StaleSecret",
+					Status:             "False",
+					Reason:             "SecretSynchronized",
+					Message:            "The managed Secret is up to date with the Vault source",
+					LastTransitionTime: metav1.NewTime(time.Now()),
+				})
+				err = r.Client.Update(ctx, myVs)
+				if err != nil {
+					log.Error(err, "failed up update phase")
+				}
+				r.Recorder.Event(myVs, v1.EventTypeNormal, "SecretCreated", "The managed Secret has been created")
+
 				log.Info("Phase updated")
 			} else {
 				log.Error(err, "failed to get corresponding Secret")

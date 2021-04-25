@@ -25,7 +25,7 @@ type SyncState string
 
 const (
 	// The in-cluster Secret is in sync with the source
-	InSyncState SyncState = "InSync"
+	InSyncState SyncState = "Ready"
 
 	// The in-cluster Secret is waiting to be updated
 	SyncingState SyncState = "Synchronizing"
@@ -76,7 +76,7 @@ type VaultSecretStatus struct {
 	Phase SyncState `json:"phase"`
 
 	// Conditions is the list of error conditions for this resource
-	Conditions []*metav1.Condition `json:"conditions,omitempty"`
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
