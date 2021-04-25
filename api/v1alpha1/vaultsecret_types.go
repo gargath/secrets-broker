@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -25,6 +26,9 @@ type SyncState string
 const (
 	// The in-cluster Secret is in sync with the source
 	InSyncState SyncState = "InSync"
+
+	// The in-cluster Secret is waiting to be updated
+	SyncingState SyncState = "Synchronizing"
 
 	// There was an error reconciling the Secret
 	ErrorState SyncState = "Error"
@@ -50,6 +54,18 @@ type VaultSecretSpec struct {
 
 	// SecretPath is the path within the specified Vault where the secrest value is held
 	SecretPath string `json:"secretPath"`
+
+	// Spec defines the structure of the managed Secret
+	Spec SecretSpec `json:"spec"`
+}
+
+// SecretSpec defines the structure of the managed Secret
+type SecretSpec struct {
+	// Type is the type of the managed secret
+	Type v1.SecretType `json:"type"`
+
+	// FieldsRefs holds the field mappings from Vault to the managed Secret
+	FieldRefs map[string]string `json:"fieldRefs"`
 }
 
 // VaultSecretStatus defines the observed state of VaultSecret
@@ -57,7 +73,10 @@ type VaultSecretStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	State SyncState `json:"state"`
+	Phase SyncState `json:"phase"`
+
+	// Conditions is the list of error conditions for this resource
+	Conditions []*metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
